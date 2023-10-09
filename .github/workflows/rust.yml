@@ -16,6 +16,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install Proto
+      run: |
+        apt update && apt upgrade -y
+        apt install -y protobuf-compiler libprotobuf-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
