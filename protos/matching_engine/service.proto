@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package matchengine_v1;
+
+import "google/protobuf/timestamp.proto";
+
+service MatchingEngine {
+  rpc ListOrders (ListOrdersRequest) returns (ListOrdersResponse);
+  rpc PlaceOrder (PlaceOrderRequest) returns (PlaceOrderResponse);
+  rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse);
+  rpc GetOrderStatus (GetOrderStatusRequest) returns (GetOrderStatusResponse);
+}
+
+enum Pair {
+  PAIR_UNSPECIFIED = 0;
+  PAIR_BTC_USD = 1;
+  PAIR_ETH_USD = 2;
+  PAIR_LTC_USD = 3;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_CREATED = 1;
+  ORDER_STATUS_CANCELLED = 2;
+  ORDER_STATUS_PARTIALLY_FILLED = 3;
+  ORDER_STATUS_FILLED = 4;
+}
+
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_LIMIT_BUY = 1;
+  ORDER_TYPE_LIMIT_SELL = 2;
+  ORDER_TYPE_MARKET_BUY = 3;
+  ORDER_TYPE_MARKET_SELL = 4;
+}
+
+message Order {
+  string id = 1;
+  string user_id = 2;
+  Pair pair = 3;
+  float price = 4;
+  float quantity = 5;
+  OrderStatus status = 6;
+  OrderType type = 7;
+  google.protobuf.Timestamp create_time = 8;
+	google.protobuf.Timestamp update_time = 9;
+	google.protobuf.Timestamp cancel_time = 10;
+}
+
+message ListOrdersRequest {
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+}
+
+message PlaceOrderRequest {
+  string user_id = 1;
+  Pair pair = 2;
+  float price = 3;
+  float quantity = 4;
+  OrderType type = 5;
+}
+
+message PlaceOrderResponse {
+  string id = 1;
+  OrderStatus status = 2;
+}
+
+message CancelOrderRequest {
+  string id = 1;
+}
+
+message CancelOrderResponse {
+  OrderStatus status = 1;
+}
+
+message GetOrderStatusRequest {
+  string id = 1;
+}
+
+message GetOrderStatusResponse {
+  Order order = 1;
+}
