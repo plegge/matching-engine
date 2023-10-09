@@ -2,13 +2,98 @@ use tonic::{transport::Server, Request, Response, Status};
 use matchingengine_v1::matching_engine_server::{MatchingEngine,MatchingEngineServer};
 use matchingengine_v1::*;
 use std::env;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use core::fmt::Debug;
+use uuid::Uuid;
+use prost_types::Timestamp;
+use std::time::SystemTime;
+
+
+fn now_as_timestamp() -> Option<Timestamp> {
+    let now = SystemTime::now();
+    let timestamp: Timestamp = now.into();
+    Some(timestamp)
+}
 
 pub mod matchingengine_v1 {
-    tonic::include_proto!("matchengine_v1");
+    tonic::include_proto!("matchingengine_v1");
+}
+
+pub trait OrderRepository: Send + Sync{
+    fn place_order(&self, order: Order) -> Result<Order, &'static str>;
+    fn cancel_order(&self, order_id: String) -> Result<(), &'static str>;
+    fn get_order_status(&self, order_id: String) -> Result<Order, &'static str>;
+    fn get_all_orders(&self, user_id: String) -> Result<Vec<Order>, &'static str>;
+}
+
+impl Debug for dyn OrderRepository {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "OrderRepository{{{}}}", "_")
+    }
 }
 
 #[derive(Debug, Default)]
-pub struct EngineServer{}
+pub struct InMemoryOrderRepository {
+    orders: Mutex<HashMap<String, Order>>,
+}
+
+// Implement Default manually for EngineServer
+impl Default for EngineServer {
+    fn default() -> Self {
+        Self {
+            repository: Box::new(InMemoryOrderRepository::new())
+        }
+    }
+}
+
+// Define a new method for InMemoryOrderRepository if it doesn't exist
+impl InMemoryOrderRepository {
+    pub fn new() -> Self {
+        Self {
+            orders: Mutex::new(HashMap::new())
+        }
+    }
+}
+
+impl OrderRepository for InMemoryOrderRepository {
+    fn place_order(&self, order: Order) -> Result<Order, &'static str> {
+        let mut orders = self.orders.lock().unwrap();
+        orders.insert(order.id.clone(), order.clone());
+        Ok(order)
+    }
+
+    fn cancel_order(&self, order_id: String) -> Result<(), &'static str> {
+        let mut orders = self.orders.lock().unwrap();
+        orders.remove(&order_id);
+        Ok(())
+    }
+
+    fn get_order_status(&self, order_id: String) -> Result<Order, &'static str> {
+        let orders = self.orders.lock().unwrap();
+        orders.get(&order_id).cloned().ok_or("order not found")
+    }
+
+    fn get_all_orders(&self, user_id: String) -> Result<Vec<Order>, &'static str> {
+        let orders = self.orders.lock().unwrap();
+        Ok(orders.values()
+            .filter(|&order| order.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+}
+
+
+#[derive(Debug)]
+pub struct EngineServer{
+    repository: Box<dyn OrderRepository>,
+}
+
+impl EngineServer {
+    pub fn new(repository: Box<dyn OrderRepository>) -> Self {
+        Self { repository }
+    }
+}
 
 #[tonic::async_trait]
 impl MatchingEngine for EngineServer {
@@ -16,20 +101,48 @@ impl MatchingEngine for EngineServer {
         &self,
         request: Request<ListOrdersRequest>,
     ) -> Result<Response<ListOrdersResponse>, Status> {
-        println!("We got the request: {:?}", request);
+        let list_request = request.into_inner();
+        let orders = self.repository.get_all_orders(list_request.user_id).clone();
 
-        let reply = matchingengine_v1::ListOrdersResponse{
-            orders: vec![],
-        };
-
-        Ok(Response::new(reply))
+        match orders {
+            Ok(orders) => Ok(Response::new(matchingengine_v1::ListOrdersResponse{
+                orders: orders.clone(),
+            })),
+            Err(e) => Err(Status::internal(e)),
+        }
     }
 
     async fn place_order(
         &self,
-        _request: Request<PlaceOrderRequest>,
+        request: Request<PlaceOrderRequest>,
     ) -> Result<Response<PlaceOrderResponse>, Status> {
-        Err(Status::internal("not implemented"))
+        let order_request = request.into_inner();
+
+        let order = Order {
+            id: Uuid::new_v4().to_string(),  // Generating a new UUID for the order
+            user_id: order_request.user_id.clone(),
+            pair: order_request.pair.clone(),
+            price: order_request.price,
+            quantity: order_request.quantity,
+            r#type: order_request.r#type.clone(),
+            status: matchingengine_v1::OrderStatus::Created.into(),
+            create_time: now_as_timestamp(),
+            update_time: None,
+            cancel_time: None,
+        };
+
+        match self.repository.place_order(order) {
+            Ok(order) => {
+                let response = PlaceOrderResponse {
+                    id: order.id,
+                    status: order.status,
+                };
+                Ok(Response::new(response))
+            },
+            Err(e) => {
+                Err(Status::internal(e))
+            }
+        }
     }
 
     async fn cancel_order(
@@ -51,7 +164,10 @@ impl MatchingEngine for EngineServer {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("initializing...");
     let addr = env::var("GRPC_ADDR").unwrap_or_else(|_| "[::1]:50051".to_string()).parse()?;
-    let engine = EngineServer::default();
+
+    let repository: Box<dyn OrderRepository> = Box::new(InMemoryOrderRepository::new());
+
+    let engine = EngineServer::new(repository);
 
     println!("starting server at {}", addr);
     Server::builder()
@@ -61,3 +177,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+

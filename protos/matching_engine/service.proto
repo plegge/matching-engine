@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package matchengine_v1;
+package matchingengine_v1;
 
 import "google/protobuf/timestamp.proto";
 
@@ -48,6 +48,7 @@ message Order {
 }
 
 message ListOrdersRequest {
+  string user_id = 1;
 }
 
 message ListOrdersResponse {
