@@ -9,7 +9,6 @@ use uuid::Uuid;
 use prost_types::Timestamp;
 use std::time::SystemTime;
 
-
 fn now_as_timestamp() -> Option<Timestamp> {
     let now = SystemTime::now();
     let timestamp: Timestamp = now.into();
