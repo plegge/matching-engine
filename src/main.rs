@@ -1,6 +1,7 @@
 use tonic::{transport::Server, Request, Response, Status};
 use matchingengine_v1::matching_engine_server::{MatchingEngine,MatchingEngineServer};
 use matchingengine_v1::*;
+use std::env;
 
 pub mod matchingengine_v1 {
     tonic::include_proto!("matchengine_v1");
@@ -49,10 +50,10 @@ impl MatchingEngine for EngineServer {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("initializing...");
-    let addr = "[::1]:50051".parse()?;
+    let addr = env::var("GRPC_ADDR").unwrap_or_else(|_| "[::1]:50051".to_string()).parse()?;
     let engine = EngineServer::default();
 
-    println!("starting server...");
+    println!("starting server at {}", addr);
     Server::builder()
             .add_service(MatchingEngineServer::new(engine))
             .serve(addr)
