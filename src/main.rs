@@ -6,14 +6,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use core::fmt::Debug;
 use uuid::Uuid;
-use prost_types::Timestamp;
 use std::time::SystemTime;
 
-fn now_as_timestamp() -> Option<Timestamp> {
-    let now = SystemTime::now();
-    let timestamp: Timestamp = now.into();
-    Some(timestamp)
-}
 
 pub mod matchingengine_v1 {
     tonic::include_proto!("matchingengine_v1");
@@ -125,7 +119,7 @@ impl MatchingEngine for EngineServer {
             quantity: order_request.quantity,
             r#type: order_request.r#type.clone(),
             status: matchingengine_v1::OrderStatus::Created.into(),
-            create_time: now_as_timestamp(),
+            create_time: Some(SystemTime::now().into()),
             update_time: None,
             cancel_time: None,
         };
